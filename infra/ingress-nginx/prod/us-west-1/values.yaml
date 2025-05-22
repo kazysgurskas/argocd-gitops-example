@@ -1,0 +1,4 @@
+---
+controller:
+  addHeaders:
+    X-Datacenter: us-west-1

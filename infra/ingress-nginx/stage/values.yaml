@@ -1,0 +1,8 @@
+---
+controller:
+  extraArgs:
+    default-ssl-certificate: ingress-nginx/company.dev
+    metrics-per-host: false
+
+  addHeaders:
+    X-Datacenter: europe-west3

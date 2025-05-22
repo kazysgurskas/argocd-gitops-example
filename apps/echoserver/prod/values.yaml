@@ -1,0 +1,16 @@
+---
+replicaCount: 5
+
+ingress:
+  enabled: true
+  hosts:
+    - host: echo.company.com
+      paths:
+        - /
+  annotations:
+    kubernetes.io/ingress.class: nginx
+
+  application:
+    logs:
+      ignore:
+        ping: true

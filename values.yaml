@@ -1,0 +1,12 @@
+## Values for app-of-apps umbrella chart
+
+# -- Glob pattern for finding app configs
+appsGlob: "{apps/*/app.yaml,infra/*/app.yaml}"
+
+# -- Default ArgoCD app syncPolicy
+syncPolicy:
+  automated:
+    prune: true
+    selfHeal: true
+  retry:
+    limit: 3
