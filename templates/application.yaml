@@ -1,0 +1,61 @@
+{{- range $path, $_ := .Files.Glob .Values.appsGlob }}
+{{- $app := $.Files.Get $path | fromYaml }}
+{{- $appDirPath := dir $path | trimPrefix "./" }}
+{{- $appCategoryRoot := splitList "/" $appDirPath | first }}
+{{- range $destination := $app.destinations }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ $app.name }}.{{ $destination.environment | default $app.environment }}.{{ $destination.name }}
+  labels:
+    argocd.argoproj.io/service: {{ $app.name }}-{{ $destination.environment | default $app.environment | default $.Values.environment }}
+{{- if $app.labels }}
+{{- toYaml $app.labels | nindent 4 }}
+{{- end }}
+  annotations:
+    {{- if or ($destination.annotations) ($app.annotations) -}}
+    {{- $destination.annotations | default $app.annotations | default $.Values.annotations | toYaml | nindent 4 }}
+    {{- end }}
+spec:
+  info:
+  - name: description
+    value: "{{ $app.description }}"
+  - name: environment
+    value: "{{ $destination.environment | default $app.environment | default $.Values.environment }}"
+  destination:
+    name: {{ $destination.name }}
+    namespace: {{ $destination.namespace | default $app.namespace }}
+  project: {{ $destination.project | default $app.project }}
+  sources:
+{{- range $source := $destination.sources }}
+  - repoURL: {{ $source.repoURL }}
+    targetRevision: {{ $source.targetRevision }}
+{{- if $source.path }}
+    path: {{ $source.path }}
+{{- end }}
+{{- if $source.helm }}
+    chart: {{ $source.chart }}
+    helm:
+      releaseName: {{ $source.helm.releaseName | default $app.name }}
+      valueFiles:
+{{- range $valueFile := $source.helm.valueFiles }}
+      - $values/{{ $appCategoryRoot }}/{{ $app.name }}/{{ $valueFile }}
+{{- end }}
+{{- end }}
+{{- if $source.directory }}
+    directory:
+{{- toYaml $source.directory | nindent 6 }}
+{{- end }}
+{{- end }}
+  - repoURL: https://github.com/kazysgurskas/argocd-gitops-example
+    targetRevision: HEAD
+    ref: values
+  syncPolicy:
+    {{- $destination.syncPolicy | default $app.syncPolicy | default $.Values.syncPolicy | toYaml | nindent 4 }}
+{{- if $app.ignoreDifferences }}
+  ignoreDifferences:
+{{ $app.ignoreDifferences | toYaml | indent 4 }}
+{{- end }}
+{{- end }}
+{{- end }}
