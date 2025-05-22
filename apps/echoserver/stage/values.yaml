@@ -1,0 +1,11 @@
+---
+replicaCount: 2
+
+ingress:
+  enabled: true
+  hosts:
+    - host: echo.company.dev
+      paths:
+        - /
+  annotations:
+    kubernetes.io/ingress.class: nginx

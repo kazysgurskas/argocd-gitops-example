@@ -1,0 +1,4 @@
+apiVersion: v2
+description: Root umbrella chart for ArgoCD apps
+name: apps
+version: 0.0.1

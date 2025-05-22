@@ -1,0 +1,19 @@
+---
+fullnameOverride: ingress-nginx
+
+defaultBackend:
+  enabled: true
+
+controller:
+  kind: DaemonSet
+
+  service:
+    sessionAffinity: ClientIP
+    externalTrafficPolicy: Local
+    ipFamilyPolicy: ""
+    ipFamilies: ""
+
+  config:
+    client-body-buffer-size: 32m
+    proxy-buffer-size: 64k
+    proxy-body-size: 32m

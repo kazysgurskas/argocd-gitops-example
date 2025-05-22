@@ -1,0 +1,44 @@
+---
+name: ingress-nginx
+description: Ingress-nginx controller
+namespace: ingress-nginx
+syncPolicy:
+  retry:
+    limit: 1
+destinations:
+  - name: us-west-1
+    environment: prod
+    project: prod
+    sources:
+      - repoURL: https://kubernetes.github.io/ingress-nginx
+        targetRevision: 4.11.1
+        chart: ingress-nginx
+        helm:
+          releaseName: ingress-nginx
+          valueFiles:
+            - base/values.yaml
+            - prod/us-west-1/values.yaml
+  - name: us-west-2
+    environment: prod
+    project: prod
+    sources:
+      - repoURL: https://kubernetes.github.io/ingress-nginx
+        targetRevision: 4.11.1
+        chart: ingress-nginx
+        helm:
+          releaseName: ingress-nginx
+          valueFiles:
+            - base/values.yaml
+            - prod/us-west-2/values.yaml
+  - name: us-west-3
+    environment: stage
+    project: stage
+    sources:
+      - repoURL: https://kubernetes.github.io/ingress-nginx
+        targetRevision: 4.12.1
+        chart: ingress-nginx
+        helm:
+          releaseName: ingress-nginx
+          valueFiles:
+            - base/values.yaml
+            - stage/values.yaml

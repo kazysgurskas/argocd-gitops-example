@@ -1,0 +1,30 @@
+---
+name: echoserver
+description: App for Echoserver
+namespace: echoserver
+syncPolicy:
+  retry:
+    limit: 1
+destinations:
+  - name: 	us-west-1
+    environment: prod
+    project: prod
+    sources:
+      - repoURL: https://ealenn.github.io/charts
+        targetRevision: 0.5.0
+        chart: echo-server
+        helm:
+          releaseName: echoserver
+          valueFiles:
+            - prod/values.yaml
+  - name: us-west-3
+    environment: stage
+    project: stage
+    sources:
+      - repoURL: https://ealenn.github.io/charts
+        targetRevision: 0.5.0
+        chart: echo-server
+        helm:
+          releaseName: echoserver
+          valueFiles:
+            - stage/values.yaml

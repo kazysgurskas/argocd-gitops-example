@@ -1,0 +1,96 @@
+name: gitops-diff
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+    - 'apps/**'
+    - 'infra/**'
+
+jobs:
+  hydrate-manifests:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
+    runs-on:
+      - ubuntu-latest
+
+    permissions:
+      id-token: write
+      pull-requests: write
+      contents: read
+
+    strategy:
+      matrix:
+        ref: [head,base]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref == 'head' && github.event.pull_request.head.ref || github.event.pull_request.base.ref }}
+          fetch-depth: 2
+
+      - name: Update head branch
+        if: matrix.ref == 'head'
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git fetch origin main:main
+          git merge main --no-commit --no-ff
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4.2.0
+        with:
+          version: '3.17.0'
+
+      - name: Generate ArgoCD Application manifests
+        run: |
+          mkdir manifests
+          helm template -s templates/application.yaml  . > manifests/applications.yaml
+
+      - name: Cache Helm charts
+        uses: actions/cache@v4
+        with:
+          path: charts
+          key: ${{ github.repository }}/charts-${{ hashFiles('manifests/applications.yaml') }}
+          restore-keys: |
+            ${{ github.repository }}/charts-
+
+      - name: Setup ArgoCD Hydrate
+        uses: kazysgurskas/setup-argocd-hydrate@v1.0.0
+
+      - name: Run ArgoCD Hydrate
+        run: |
+          argocd-hydrate
+
+      - name: Upload manifests as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.ref }}-manifests
+          path: manifests/
+          retention-days: 1
+
+  generate-diff:
+    needs: hydrate-manifests
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
+    runs-on:
+      - ubuntu-latest
+
+    steps:
+      - name: Download head manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: head-manifests
+          path: head
+
+      - name: Download base manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: base-manifests
+          path: base
+
+      - name: Post diff
+        uses: kazysgurskas/diff-action@v1.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          source-dir: base
+          target-dir: head
