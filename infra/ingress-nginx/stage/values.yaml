@@ -6,3 +6,6 @@ controller:
 
   addHeaders:
     X-Datacenter: europe-west3
+
+defaultBackend:
+  enabled: true
