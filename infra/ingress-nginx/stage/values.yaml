@@ -1,4 +1,8 @@
 ---
+
+defaultBackend:
+  enabled: false
+
 controller:
   extraArgs:
     default-ssl-certificate: ingress-nginx/company.dev
