@@ -1,6 +1,9 @@
 ---
 replicaCount: 5
 
+image:
+  tag: 0.9.1
+
 ingress:
   enabled: true
   hosts:
