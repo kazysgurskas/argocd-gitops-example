@@ -6,7 +6,7 @@ syncPolicy:
   retry:
     limit: 1
 destinations:
-  - name: 	us-west-1
+  - name: us-west-1
     environment: prod
     project: prod
     sources:
