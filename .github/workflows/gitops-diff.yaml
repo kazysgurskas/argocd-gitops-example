@@ -4,93 +4,104 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
-    - 'apps/**'
-    - 'infra/**'
+      - 'apps/**'
+      - 'infra/**'
+      - '.github/workflows/gitops-diff.yaml'
 
 jobs:
-  hydrate-manifests:
+  diff:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
-    runs-on:
-      - ubuntu-latest
+    runs-on: ubuntu-latest
 
     permissions:
-      id-token: write
       pull-requests: write
       contents: read
 
-    strategy:
-      matrix:
-        ref: [head,base]
-
     steps:
-      - name: Checkout
+      # The base of the pull request, and its head merged into the base as
+      # GitHub would merge it (the default ref on pull_request events).
+      - name: Checkout base
         uses: actions/checkout@v4
         with:
-          ref: ${{ matrix.ref == 'head' && github.event.pull_request.head.ref || github.event.pull_request.base.ref }}
-          fetch-depth: 2
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
 
-      - name: Update head branch
-        if: matrix.ref == 'head'
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git fetch origin main:main
-          git merge main --no-commit --no-ff
+      - name: Checkout head
+        uses: actions/checkout@v4
+        with:
+          path: head
 
       - name: Setup Helm
         uses: azure/setup-helm@v4.2.0
         with:
           version: '3.17.0'
 
+      # The app-of-apps chart turns apps/*/app.yaml and infra/*/app.yaml into
+      # ArgoCD Application resources; render it in both checkouts.
       - name: Generate ArgoCD Application manifests
         run: |
-          mkdir manifests
-          helm template -s templates/application.yaml  . > manifests/applications.yaml
+          for side in base head; do
+            mkdir -p "$side/manifests"
+            helm template -s templates/application.yaml "$side" > "$side/manifests/applications.yaml"
+          done
 
       - name: Cache Helm charts
         uses: actions/cache@v4
         with:
           path: charts
-          key: ${{ github.repository }}/charts-${{ hashFiles('manifests/applications.yaml') }}
+          key: ${{ github.repository }}/charts-${{ hashFiles('head/manifests/applications.yaml') }}
           restore-keys: |
             ${{ github.repository }}/charts-
 
-      - name: Setup ArgoCD Hydrate
-        uses: kazysgurskas/setup-argocd-hydrate@v1.0.0
+      - name: Setup argocd-diff
+        uses: kazysgurskas/argocd-diff@v1.0.0
 
-      - name: Run ArgoCD Hydrate
+      # Hydrates both checkouts without an ArgoCD instance and diffs the
+      # rendered manifests into an HTML report and a Markdown summary.
+      - name: Render and diff
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
-          argocd-hydrate
+          argocd-diff --base base --head head \
+            --applications manifests/applications.yaml \
+            --charts-dir charts --rendered rendered \
+            --output diff.html --summary diff.md \
+            --pr-title "$PR_TITLE" --author "$AUTHOR"
 
-      - name: Upload manifests as artifact
+      - name: Upload the report
+        id: report
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.ref }}-manifests
-          path: manifests/
-          retention-days: 1
+          name: manifest-diff
+          path: diff.html
 
-  generate-diff:
-    needs: hydrate-manifests
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
-    runs-on:
-      - ubuntu-latest
+      - name: Compose the comment
+        env:
+          ARTIFACT_URL: ${{ steps.report.outputs.artifact-url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          {
+            echo '<!-- manifest-diff-comment -->'
+            echo '### Rendered manifest diff'
+            echo
+            cat diff.md
+            echo
+            echo "**[Download the full report](${ARTIFACT_URL})** · [workflow run](${RUN_URL})"
+          } > comment.md
+          cat comment.md >> "$GITHUB_STEP_SUMMARY"
 
-    steps:
-      - name: Download head manifests
-        uses: actions/download-artifact@v4
+      - name: Find the previous comment
+        id: find-comment
+        uses: peter-evans/find-comment@v4
         with:
-          name: head-manifests
-          path: head
+          issue-number: ${{ github.event.pull_request.number }}
+          body-includes: '<!-- manifest-diff-comment -->'
 
-      - name: Download base manifests
-        uses: actions/download-artifact@v4
+      - name: Comment on the pull request
+        uses: peter-evans/create-or-update-comment@v5
         with:
-          name: base-manifests
-          path: base
-
-      - name: Post diff
-        uses: kazysgurskas/diff-action@v1.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          source-dir: base
-          target-dir: head
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          edit-mode: replace
+          body-path: comment.md
