@@ -37,36 +37,33 @@ jobs:
           version: '3.17.0'
 
       # The app-of-apps chart turns apps/*/app.yaml and infra/*/app.yaml into
-      # ArgoCD Application resources; render it in both checkouts.
+      # ArgoCD Application resources; render it into applications.yaml in
+      # both checkouts, where argocd-diff looks by default.
       - name: Generate ArgoCD Application manifests
         run: |
           for side in base head; do
-            mkdir -p "$side/manifests"
-            helm template -s templates/application.yaml "$side" > "$side/manifests/applications.yaml"
+            helm template -s templates/application.yaml "$side" > "$side/applications.yaml"
           done
 
       - name: Cache Helm charts
         uses: actions/cache@v4
         with:
           path: charts
-          key: ${{ github.repository }}/charts-${{ hashFiles('head/manifests/applications.yaml') }}
+          key: ${{ github.repository }}/charts-${{ hashFiles('head/applications.yaml') }}
           restore-keys: |
             ${{ github.repository }}/charts-
 
       - name: Setup argocd-diff
-        uses: kazysgurskas/argocd-diff@v1.0.0
+        uses: kazysgurskas/argocd-diff@v1.1.0
 
-      # Hydrates both checkouts without an ArgoCD instance and diffs the
-      # rendered manifests into an HTML report and a Markdown summary.
+      # Renders base/ and head/ without an ArgoCD instance and diffs the
+      # manifests into diff.html and the Markdown summary.
       - name: Render and diff
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
-          argocd-diff --base base --head head \
-            --applications manifests/applications.yaml \
-            --charts-dir charts --rendered rendered \
-            --output diff.html --summary diff.md \
+          argocd-diff --charts-dir charts --summary diff.md \
             --pr-title "$PR_TITLE" --author "$AUTHOR"
 
       - name: Upload the report
